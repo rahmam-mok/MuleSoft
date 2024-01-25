@@ -1,0 +1,106 @@
+ When working with ActiveMQ failover brokers, you can configure the failover transport in MuleSoft. Here's an example MuleSoft flow that reads messages from an ActiveMQ topic with failover configuration and closes the connection or channel once all messages are consumed:
+
+```xml
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:jms="http://www.mulesoft.org/schema/mule/jms"
+    xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+    http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd">
+
+    <!-- Configure JMS connection with failover -->
+    <jms:config name="JMS_Config" doc:name="JMS Config">
+        <jms:active-mq-connector brokerURL="failover:(tcp://activemq-broker1:61616,tcp://activemq-broker2:61616)" />
+    </jms:config>
+
+    <!-- Subscribe to ActiveMQ topic -->
+    <jms:listener-config name="JMS_Listener_Config" doc:name="JMS Listener Config" >
+        <jms:listener-connection
+            topicDestinationName="your-topic-name"
+            connectionFactory-ref="JMS_Config" />
+    </jms:listener-config>
+
+    <!-- Process received messages -->
+    <flow name="ProcessMessagesFlow">
+        <jms:inbound-endpoint
+            connector-ref="JMS_Listener_Config"
+            doc:name="JMS"
+            exchange-pattern="request-response" />
+
+        <!-- Your message processing logic here -->
+
+        <!-- Check if all messages are consumed -->
+        <expression-component>
+            <![CDATA[
+                if (allMessagesConsumedCondition) {
+                    // Close the JMS connection or channel
+                    message.getInvocationProperty("jms.connector").close()
+                }
+            ]]>
+        </expression-component>
+    </flow>
+</mule>
+```
+
+Replace placeholders like "activemq-broker1", "activemq-broker2", and "your-topic-name" with your specific ActiveMQ broker URLs and topic name. Adjust the message processing logic and the condition in the `<expression-component>` block according to your requirements. The failover configuration is specified in the `brokerURL` attribute of the `<jms:active-mq-connector>` element.
+
+
+
+#################
+The condition for checking if all messages are consumed depends on the specifics of your use case. You may use a variable or a counter to track the number of messages consumed. Here's a generic example using a counter:
+
+```xml
+<expression-component>
+    <![CDATA[
+        // Increment a counter for each consumed message
+        int messageCounter = message.getInvocationProperty("messageCounter") ?: 0;
+        messageCounter++;
+
+        // Store the updated counter in the message properties
+        message.setInvocationProperty("messageCounter", messageCounter);
+
+        // Check if all expected messages are consumed (adjust 100 to your expected count)
+        boolean allMessagesConsumed = messageCounter >= 100;
+
+        if (allMessagesConsumed) {
+            // Close the JMS connection or channel
+            message.getInvocationProperty("jms.connector").close();
+        }
+    ]]>
+</expression-component>
+```
+
+In this example, the `messageCounter` is incremented for each consumed message. Adjust the condition `messageCounter >= 100` based on your specific scenario. When the condition is met, the JMS connection or channel is closed. Replace "100" with the total number of messages you expect to consume.
+
+
+####################
+
+Your message processing logic will depend on what you want to achieve with each consumed message. Here's a simple example where the content of the message payload is logged:
+
+```xml
+<flow name="ProcessMessagesFlow">
+    <jms:inbound-endpoint
+        connector-ref="JMS_Listener_Config"
+        doc:name="JMS"
+        exchange-pattern="request-response" />
+
+    <!-- Log the content of the received message -->
+    <logger message="#[payload]" level="INFO" doc:name="Log Message" />
+
+    <!-- Your additional processing logic here -->
+
+    <!-- Check if all messages are consumed -->
+    <expression-component>
+        <![CDATA[
+            if (allMessagesConsumedCondition) {
+                // Close the JMS connection or channel
+                message.getInvocationProperty("jms.connector").close()
+            }
+        ]]>
+    </expression-component>
+</flow>
+```
+
+In this example, the `<logger>` component logs the content of the received message payload. You can replace this with your specific message processing logic, such as transforming the message, storing it in a database, invoking an external service, etc.
+
+Adjust the `allMessagesConsumedCondition` to match your criteria for determining when all messages are consumed. Once this condition is met, the JMS connection or channel will be closed.
+
